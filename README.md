@@ -4,7 +4,7 @@ Research and development for OpenTelemetry observability setup, targeting BCIT L
 
 ## Background
 
-This project tracks the R&D effort to evaluate and build out an [OpenTelemetry](https://opentelemetry.io/) observability stack that can eventually be integrated into the LTC's Kubernetes-based infrastructure.
+This project tracks the R&D effort to evaluate and build out an [OpenTelemetry](https://opentelemetry.io/) **application observability** stack — collecting logs, metrics, and traces from LTC apps — that can eventually be integrated into the LTC's Kubernetes-based infrastructure.
 
 ### LTC Infrastructure Summary
 
@@ -25,7 +25,7 @@ The production LTC environment (documented at [infrastructure-documentation.ltc.
 
 ## Goal
 
-Build a local proof-of-concept OpenTelemetry environment on macOS that mirrors the LTC cluster topology closely enough to validate collector pipelines, instrumentation patterns, and backend integrations before rolling them into staging/production.
+Build a local proof-of-concept OpenTelemetry environment on macOS to validate **application-level observability**: how LTC apps emit logs, metrics, and traces via OpenTelemetry, how the Collector pipelines process that telemetry, and how it surfaces in backend dashboards — before rolling the setup into staging/production.
 
 ## Suggested Local Lab Architecture
 
@@ -42,18 +42,18 @@ Build a local proof-of-concept OpenTelemetry environment on macOS that mirrors t
 
 | Component | Purpose | Install method |
 |---|---|---|
-| **OpenTelemetry Collector** | Receives, processes, and exports traces, metrics, and logs | Helm chart (`open-telemetry/opentelemetry-collector`) |
-| **OTel Operator** (optional) | Auto-manages Collector instances & auto-instrumentation injection | Helm chart (`open-telemetry/opentelemetry-operator`) |
-| **Auto-instrumentation** | Zero-code instrumentation for Java, Python, Node.js, .NET, Go | CRDs created by the Operator |
+| **OpenTelemetry Collector** | Central pipeline — receives app logs, metrics, and traces, then exports to backends | Helm chart (`open-telemetry/opentelemetry-collector`) |
+| **OTel Operator** (optional) | Auto-manages Collector instances & injects auto-instrumentation into app pods | Helm chart (`open-telemetry/opentelemetry-operator`) |
+| **Auto-instrumentation** | Zero-code SDK injection so apps emit traces, metrics, and structured logs without code changes | CRDs created by the Operator |
 
 ### 3. Observability Backends
 
 | Backend | Telemetry signal | Install method |
 |---|---|---|
-| **Jaeger** | Traces | Helm chart or all-in-one Docker image |
-| **Prometheus** | Metrics | Helm chart (`prometheus-community/kube-prometheus-stack`) |
-| **Grafana** | Dashboards (all signals) | Bundled with kube-prometheus-stack |
-| **Loki** | Logs | Helm chart (`grafana/loki-stack`) |
+| **Jaeger** | Application traces (request flows, latency, errors) | Helm chart or all-in-one Docker image |
+| **Prometheus** | Application metrics (request rates, error rates, durations) | Helm chart (`prometheus-community/kube-prometheus-stack`) |
+| **Grafana** | Unified dashboards for app logs, metrics, and traces | Bundled with kube-prometheus-stack |
+| **Loki** | Application logs (structured log aggregation) | Helm chart (`grafana/loki-stack`) |
 
 ### 4. Sample Workloads
 
@@ -65,16 +65,20 @@ Deploy one or more demo apps to generate telemetry:
 ### 5. High-Level Data Flow
 
 ```
-[ App Pods w/ OTel SDK or auto-instrumentation ]
-            │
-            ▼
-[ OpenTelemetry Collector (DaemonSet or Deployment) ]
-   ┌────────┼────────┐
-   ▼        ▼        ▼
-Jaeger   Prometheus  Loki
-   └────────┼────────┘
-            ▼
-        Grafana
+[ LTC App Pods ]
+  │  OTel SDK / auto-instrumentation emits:
+  │    • traces  (OTLP)
+  │    • metrics (OTLP)
+  │    • logs    (OTLP)
+  ▼
+[ OpenTelemetry Collector ]
+  │  pipelines: receive → process (batch, filter) → export
+  ├──► Jaeger      (traces)
+  ├──► Prometheus  (metrics)
+  └──► Loki        (logs)
+         │
+         ▼
+      Grafana  (unified app dashboards)
 ```
 
 ## Getting Started (TODO)
@@ -107,9 +111,11 @@ opentelemetry-lab/
 ## Open Questions
 
 - Which LTC apps should be instrumented first?
-- Should the Collector run as a DaemonSet (per-node) or a centralized Deployment (gateway)?
-- What sampling strategy is appropriate for production traffic volumes?
-- Integration with HashiCorp Vault for collector secrets?
+- What languages/frameworks do the target apps use? (determines SDK & auto-instrumentation approach)
+- Should the Collector run as a DaemonSet (sidecar-like, per-node) or a centralized Deployment (gateway)?
+- What trace sampling strategy is appropriate for production traffic volumes?
+- Structured logging format — should apps adopt OTel log bridging or emit OTLP logs natively?
+- Integration with HashiCorp Vault for collector and exporter secrets?
 - Multi-cluster collection — one central collector or per-cluster?
 
 ## References
